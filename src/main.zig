@@ -228,6 +228,74 @@ test "joltage" {
     try std.testing.expectEqual(89, joltage("11189", 2));
     try std.testing.expectEqual(1189, joltage("11189", 4));
 }
+
+fn remove(rolls: *std.ArrayList(bool), neighbors: *[]usize, dim1: usize, dim2: usize) i64 {
+    var removed: i64 = 0;
+    for (0..dim1) |idx1| {
+        for (0..dim2) |idx2| {
+            if (rolls.items[idx1 * dim2 + idx2]) {
+                if (neighbors.*[idx1 * dim2 + idx2] < 4) {
+                    removed += 1;
+                    rolls.items[idx1 * dim2 + idx2] = false;
+                }
+            }
+        }
+    }
+    return removed;
+}
+fn update(rolls: *std.ArrayList(bool), neighbors: *[]usize, dim1: usize, dim2: usize) void {
+    for (0..dim1) |idx1| {
+        for (0..dim2) |idx2| {
+            neighbors.*[idx1 * dim2 + idx2] = 0;
+        }
+    }
+    for (0..dim1) |idx1| {
+        for (0..dim2) |idx2| {
+            const start1 = if (idx1 > 0) idx1 - 1 else 0;
+            const start2 = if (idx2 > 0) idx2 - 1 else 0;
+            const end1 = @min(idx1 + 1, dim1 - 1);
+            const end2 = @min(idx2 + 1, dim2 - 1);
+            if (!rolls.items[idx1 * dim2 + idx2])
+                continue;
+            for (start1..end1 + 1) |it1| {
+                for (start2..end2 + 1) |it2| {
+                    if ((it1 != idx1 or it2 != idx2) and rolls.items[idx1 * dim2 + idx2]) {
+                        neighbors.*[it1 * dim2 + it2] += 1;
+                    }
+                }
+            }
+        }
+    }
+}
+pub fn mode4(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
+    var sum: i64 = 0;
+    var rolls = try std.ArrayList(bool).initCapacity(alloc, 1000);
+    var dim1_check: ?usize = null;
+    var dim2: usize = 0;
+    while (true) {
+        const line = fr.takeDelimiterExclusive('\n') catch break;
+        _ = try fr.takeByte();
+        if (line.len == 0) break;
+        if (dim1_check == null) {
+            dim1_check = line.len;
+        } else {
+            std.debug.assert(dim1_check.? == line.len);
+        }
+        for (line) |c| {
+            try rolls.append(alloc, c == '@');
+        }
+        dim2 += 1;
+    }
+    const dim1: usize = dim1_check.?;
+    var neighbors = try alloc.alloc(usize, dim1 * dim2);
+    while (true) {
+        update(&rolls, &neighbors, dim1, dim2);
+        const added = remove(&rolls, &neighbors, dim1, dim2);
+        sum += added;
+        if (!second_lvl or added == 0)
+            return sum;
+    }
+}
 pub fn main() !void {
     var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
     const gpa = general_purpose_allocator.allocator();
@@ -255,7 +323,8 @@ pub fn main() !void {
             try mode2(fr, gpa, mode == 2)
         else if (day == 3)
             try mode3(fr, mode == 2)
-            // try mode3_1(fr, gpa)
+        else if (day == 4)
+            try mode4(gpa, fr, mode == 2)
         else {
             unreachable;
         };
