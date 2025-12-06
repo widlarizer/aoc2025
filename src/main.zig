@@ -296,9 +296,69 @@ pub fn mode4(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
             return sum;
     }
 }
+const Inventory = struct {
+    const Range = struct { first: usize, last: usize };
+    ranges: std.ArrayList(Range),
+    fn add_range(self: *Inventory, alloc: std.mem.Allocator, first: usize, last: usize) !void {
+        try self.ranges.append(alloc, Range{ .first = first, .last = last });
+    }
+    fn is_fresh(self: *Inventory, item: usize) bool {
+        for (self.ranges.items) |range| {
+            if (item >= range.first and item <= range.last)
+                return true;
+        }
+        return false;
+    }
+    fn free(self: *Inventory, alloc: std.mem.Allocator) !void {
+        self.ranges.clearAndFree(alloc);
+    }
+};
+test "inventory" {
+    // std.testing.allocator
+    const alloc = std.testing.allocator;
+    var inv = Inventory{ .ranges = try std.ArrayList(Inventory.Range).initCapacity(alloc, 0) };
+    try inv.add_range(alloc, 3, 6);
+    try inv.add_range(alloc, 10, 11);
+    try std.testing.expectEqual(true, inv.is_fresh(11));
+    try std.testing.expectEqual(true, inv.is_fresh(4));
+    try std.testing.expectEqual(false, inv.is_fresh(2));
+    try inv.free(alloc);
+}
+pub fn mode5(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
+    std.debug.assert(!second_lvl);
+    var sum: i64 = 0;
+    var inv = Inventory{ .ranges = try std.ArrayList(Inventory.Range).initCapacity(alloc, 0) };
+    while (true) {
+        // std.debug.print(".._{c}_\n", .{try fr.peekByte()});
+        if (try fr.peekByte() == '\n') {
+            _ = try fr.takeByte();
+            break;
+        }
+        const first_s = try fr.takeDelimiterExclusive('-');
+        // std.debug.print("_{s}_\n", .{first_s});
+        _ = try fr.takeByte();
+        const first = try std.fmt.parseInt(usize, first_s, 10);
+        const last_s = try fr.takeDelimiterExclusive('\n');
+        _ = try fr.takeByte();
+        const last = try std.fmt.parseInt(usize, last_s, 10);
+        try inv.add_range(alloc, first, last);
+    }
+    while (true) {
+        const item_s = fr.takeDelimiterExclusive('\n') catch break;
+        _ = try fr.takeByte();
+        // std.debug.print("_{s}_\n", .{item_s});
+        const item = try std.fmt.parseInt(usize, item_s, 10);
+        if (inv.is_fresh(item))
+            sum += 1;
+    }
+    try inv.free(alloc);
+    return sum;
+}
 pub fn main() !void {
     var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
     const gpa = general_purpose_allocator.allocator();
+    // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    // defer arena.deinit();
     var args = try std.process.argsWithAllocator(gpa);
     _ = args.skip();
     const path: []const u8 = args.next().?;
@@ -325,6 +385,8 @@ pub fn main() !void {
             try mode3(fr, mode == 2)
         else if (day == 4)
             try mode4(gpa, fr, mode == 2)
+        else if (day == 5)
+            try mode5(gpa, fr, mode == 2)
         else {
             unreachable;
         };
