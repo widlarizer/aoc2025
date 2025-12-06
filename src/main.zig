@@ -119,7 +119,7 @@ fn goofy(num: usize, alloc: std.mem.Allocator, second_lvl: bool) !bool {
     }
     // const patterns = [length][length]?u8{} ** null;
     var correct = try alloc.alloc(bool, length);
-    std.debug.print("{} num\n", .{num});
+    // std.debug.print("{} num\n", .{num});
     defer alloc.free(correct);
     // const correct = [length]bool{} ** true;
     for (0..length) |pat_idx| {
@@ -163,7 +163,7 @@ fn goofy(num: usize, alloc: std.mem.Allocator, second_lvl: bool) !bool {
     return false;
 }
 fn goofy_in_range(alloc: std.mem.Allocator, start: usize, end: usize, second_lvl: bool) !i64 {
-    std.debug.print("in range {} {}?\n", .{ start, end });
+    // std.debug.print("in range {} {}?\n", .{ start, end });
     var count: usize = 0;
     var sum: usize = 0;
     for (start..end + 1) |num| {
@@ -173,7 +173,7 @@ fn goofy_in_range(alloc: std.mem.Allocator, start: usize, end: usize, second_lvl
             sum += num;
         }
     }
-    std.debug.print("in range {} sum {}\n", .{ count, sum });
+    // std.debug.print("in range {} sum {}\n", .{ count, sum });
     return @intCast(sum);
 }
 
@@ -194,11 +194,40 @@ fn mode2(fr: *std.Io.Reader, alloc: std.mem.Allocator, second_lvl: bool) !i64 {
 test "goofy" {
     const alloc = std.testing.allocator;
     // const inp: []u8 = "1000-1111";
-    try std.testing.expectEqual(true, goofy(2121, alloc));
-    try std.testing.expectEqual(false, goofy(1091, alloc));
-    try std.testing.expectEqual(2, goofy_in_range(alloc, 1000, 1111));
+    try std.testing.expectEqual(true, goofy(2121, alloc, false));
+    try std.testing.expectEqual(false, goofy(1091, alloc, false));
+    try std.testing.expectEqual(2121, goofy_in_range(alloc, 1000, 1111, false));
 }
 
+// , alloc: std.mem.Allocator
+fn joltage(line: []const u8, length: usize) ?usize {
+    // std.debug.print("jolting {s} {}\n", .{ line, length });
+    if (length == 0) return null;
+    const trim = length - 1;
+    const first_idx = std.sort.argMax(u8, line[0 .. line.len - trim], {}, std.sort.asc(u8)).?;
+    const first = line[first_idx] - '0';
+    // const second = std.sort.max(u8, line[first_idx + 1 ..], {}, std.sort.asc(u8)).? - '0';
+
+    const rest = joltage(line[first_idx + 1 ..], length - 1);
+    const ret = if (rest != null) first * std.math.pow(usize, 10, length - 1) + rest.? else first;
+    // std.debug.print("first {} ret {}\n", .{ first, ret });
+    return ret;
+}
+pub fn mode3(fr: *std.Io.Reader, second_lvl: bool) !i64 {
+    var sum: usize = 0;
+    while (true) {
+        const line = fr.takeDelimiterExclusive('\n') catch break;
+        _ = fr.takeByte() catch break;
+        sum += joltage(line, if (second_lvl) 12 else 2).?;
+    }
+    return @intCast(sum);
+}
+test "joltage" {
+    try std.testing.expectEqual(45, joltage("41115", 2));
+    try std.testing.expectEqual(415, joltage("41115", 3));
+    try std.testing.expectEqual(89, joltage("11189", 2));
+    try std.testing.expectEqual(1189, joltage("11189", 4));
+}
 pub fn main() !void {
     var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
     const gpa = general_purpose_allocator.allocator();
@@ -222,10 +251,11 @@ pub fn main() !void {
             try mode1_1(fr)
         else if (day == 1 and mode == 2)
             try mode1_2(fr)
-        else if (day == 2 and mode == 1)
-            try mode2(fr, gpa, false)
-        else if (day == 2 and mode == 2)
-            try mode2(fr, gpa, true)
+        else if (day == 2)
+            try mode2(fr, gpa, mode == 2)
+        else if (day == 3)
+            try mode3(fr, mode == 2)
+            // try mode3_1(fr, gpa)
         else {
             unreachable;
         };
