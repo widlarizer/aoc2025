@@ -300,52 +300,60 @@ const Inventory = struct {
     const Range = struct {
         first: usize,
         last: usize,
+        node: std.DoublyLinkedList.Node,
         fn edge_in_other(self: *Range, other: Range) bool {
-            std.debug.print("{} {} {} {}\n", .{ other.first <= self.first, self.first <= other.last, other.first <= self.last, self.last <= other.last });
             return ((other.first <= self.first and self.first <= other.last) or (other.first <= self.last and self.last <= other.last));
         }
         fn merge(self: *Range, other: Range) Range {
             return Range{
                 .first = @min(self.first, other.first),
                 .last = @max(self.last, other.last),
+                .node = self.node,
             };
         }
     };
     ranges: std.DoublyLinkedList,
 
     fn add_range(self: *Inventory, alloc: std.mem.Allocator, first: usize, last: usize) !void {
-        var new_range = Range{ .first = first, .last = last };
+        var new_range = try alloc.create(Range);
+        new_range.* = Range{ .first = first, .last = last, .node = .{} };
         var it = self.ranges.first;
-        while (it) |range| : (it = range.next) {
-            if (range.edge_in_other(new_range) or new_range.edge_in_other(range.*)) {
-                std.debug.print("merge {} {} into {} {}\n", .{ new_range.first, new_range.last, range.first, range.last });
-                const new_new_range = range.merge(new_range);
-                self.ranges.remove(range);
-                self.add_range(alloc, new_new_range.first, new_new_range.last);
+        while (it) |node| : (it = node.next) {
+            const range: *Range = @fieldParentPtr("node", node);
+            if (range.edge_in_other(new_range.*) or new_range.edge_in_other(range.*)) {
+                const new_new_range = range.merge(new_range.*);
+                self.ranges.remove(node);
+                try self.add_range(alloc, new_new_range.first, new_new_range.last);
+                alloc.destroy(new_range);
                 return;
-            } else {
-                std.debug.print("nop {} {} into {} {}\n", .{ new_range.first, new_range.last, range.first, range.last });
             }
         }
-        // alloc.alloc(Range);
-        try self.ranges.append(alloc, new_range);
+        self.ranges.prepend(&new_range.node);
     }
     fn total_count(self: *Inventory) usize {
         var sum: usize = 0;
-        for (self.ranges.items) |range| {
+        var it = self.ranges.first;
+        while (it) |node| : (it = node.next) {
+            const range: *Range = @fieldParentPtr("node", node);
             sum += range.last - range.first + 1;
         }
         return sum;
     }
     fn is_fresh(self: *Inventory, item: usize) bool {
-        for (self.ranges.items) |range| {
+        var it = self.ranges.first;
+        while (it) |node| : (it = node.next) {
+            const range: *Inventory.Range = @fieldParentPtr("node", node);
             if (item >= range.first and item <= range.last)
                 return true;
         }
         return false;
     }
     fn free(self: *Inventory, alloc: std.mem.Allocator) !void {
-        self.ranges.clearAndFree(alloc);
+        var it = self.ranges.first;
+        while (it) |node| : (it = node.next) {
+            const range: *Inventory.Range = @fieldParentPtr("node", node);
+            alloc.destroy(range);
+        }
     }
 };
 test "inventory" {
@@ -359,9 +367,6 @@ test "inventory" {
     try std.testing.expectEqual(true, inv.is_fresh(11));
     try std.testing.expectEqual(true, inv.is_fresh(4));
     try std.testing.expectEqual(false, inv.is_fresh(200));
-    for (inv.ranges.items) |range| {
-        std.debug.print("{}..{}\n", .{ range.first, range.last });
-    }
     try std.testing.expectEqual(11, inv.total_count());
     try inv.free(alloc);
 }
@@ -369,13 +374,11 @@ pub fn mode5(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     var sum: i64 = 0;
     var inv = Inventory{ .ranges = .{} };
     while (true) {
-        // std.debug.print(".._{c}_\n", .{try fr.peekByte()});
         if (try fr.peekByte() == '\n') {
             _ = try fr.takeByte();
             break;
         }
         const first_s = try fr.takeDelimiterExclusive('-');
-        // std.debug.print("_{s}_\n", .{first_s});
         _ = try fr.takeByte();
         const first = try std.fmt.parseInt(usize, first_s, 10);
         const last_s = try fr.takeDelimiterExclusive('\n');
@@ -384,9 +387,6 @@ pub fn mode5(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
         try inv.add_range(alloc, first, last);
     }
     if (second_lvl) {
-        for (inv.ranges.items) |range| {
-            std.debug.print("{}..{}\n", .{ range.first, range.last });
-        }
         return @intCast(inv.total_count());
     }
     while (true) {
