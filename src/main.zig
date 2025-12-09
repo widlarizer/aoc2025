@@ -297,10 +297,45 @@ pub fn mode4(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     }
 }
 const Inventory = struct {
-    const Range = struct { first: usize, last: usize };
-    ranges: std.ArrayList(Range),
+    const Range = struct {
+        first: usize,
+        last: usize,
+        fn edge_in_other(self: *Range, other: Range) bool {
+            std.debug.print("{} {} {} {}\n", .{ other.first <= self.first, self.first <= other.last, other.first <= self.last, self.last <= other.last });
+            return ((other.first <= self.first and self.first <= other.last) or (other.first <= self.last and self.last <= other.last));
+        }
+        fn merge(self: *Range, other: Range) Range {
+            return Range{
+                .first = @min(self.first, other.first),
+                .last = @max(self.last, other.last),
+            };
+        }
+    };
+    ranges: std.DoublyLinkedList,
+
     fn add_range(self: *Inventory, alloc: std.mem.Allocator, first: usize, last: usize) !void {
-        try self.ranges.append(alloc, Range{ .first = first, .last = last });
+        var new_range = Range{ .first = first, .last = last };
+        var it = self.ranges.first;
+        while (it) |range| : (it = range.next) {
+            if (range.edge_in_other(new_range) or new_range.edge_in_other(range.*)) {
+                std.debug.print("merge {} {} into {} {}\n", .{ new_range.first, new_range.last, range.first, range.last });
+                const new_new_range = range.merge(new_range);
+                self.ranges.remove(range);
+                self.add_range(alloc, new_new_range.first, new_new_range.last);
+                return;
+            } else {
+                std.debug.print("nop {} {} into {} {}\n", .{ new_range.first, new_range.last, range.first, range.last });
+            }
+        }
+        // alloc.alloc(Range);
+        try self.ranges.append(alloc, new_range);
+    }
+    fn total_count(self: *Inventory) usize {
+        var sum: usize = 0;
+        for (self.ranges.items) |range| {
+            sum += range.last - range.first + 1;
+        }
+        return sum;
     }
     fn is_fresh(self: *Inventory, item: usize) bool {
         for (self.ranges.items) |range| {
@@ -316,18 +351,23 @@ const Inventory = struct {
 test "inventory" {
     // std.testing.allocator
     const alloc = std.testing.allocator;
-    var inv = Inventory{ .ranges = try std.ArrayList(Inventory.Range).initCapacity(alloc, 0) };
+    var inv = Inventory{ .ranges = .{} };
     try inv.add_range(alloc, 3, 6);
     try inv.add_range(alloc, 10, 11);
+    try inv.add_range(alloc, 11, 15);
+    try inv.add_range(alloc, 2, 4);
     try std.testing.expectEqual(true, inv.is_fresh(11));
     try std.testing.expectEqual(true, inv.is_fresh(4));
-    try std.testing.expectEqual(false, inv.is_fresh(2));
+    try std.testing.expectEqual(false, inv.is_fresh(200));
+    for (inv.ranges.items) |range| {
+        std.debug.print("{}..{}\n", .{ range.first, range.last });
+    }
+    try std.testing.expectEqual(11, inv.total_count());
     try inv.free(alloc);
 }
 pub fn mode5(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
-    std.debug.assert(!second_lvl);
     var sum: i64 = 0;
-    var inv = Inventory{ .ranges = try std.ArrayList(Inventory.Range).initCapacity(alloc, 0) };
+    var inv = Inventory{ .ranges = .{} };
     while (true) {
         // std.debug.print(".._{c}_\n", .{try fr.peekByte()});
         if (try fr.peekByte() == '\n') {
@@ -342,6 +382,12 @@ pub fn mode5(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
         _ = try fr.takeByte();
         const last = try std.fmt.parseInt(usize, last_s, 10);
         try inv.add_range(alloc, first, last);
+    }
+    if (second_lvl) {
+        for (inv.ranges.items) |range| {
+            std.debug.print("{}..{}\n", .{ range.first, range.last });
+        }
+        return @intCast(inv.total_count());
     }
     while (true) {
         const item_s = fr.takeDelimiterExclusive('\n') catch break;
