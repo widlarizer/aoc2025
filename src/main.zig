@@ -323,8 +323,9 @@ const Inventory = struct {
             if (range.edge_in_other(new_range.*) or new_range.edge_in_other(range.*)) {
                 const new_new_range = range.merge(new_range.*);
                 self.ranges.remove(node);
-                try self.add_range(alloc, new_new_range.first, new_new_range.last);
+                alloc.destroy(range);
                 alloc.destroy(new_range);
+                try self.add_range(alloc, new_new_range.first, new_new_range.last);
                 return;
             }
         }
@@ -350,7 +351,8 @@ const Inventory = struct {
     }
     fn free(self: *Inventory, alloc: std.mem.Allocator) !void {
         var it = self.ranges.first;
-        while (it) |node| : (it = node.next) {
+        while (it) |node| {
+            it = node.next;
             const range: *Inventory.Range = @fieldParentPtr("node", node);
             alloc.destroy(range);
         }
