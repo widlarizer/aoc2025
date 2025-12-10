@@ -402,6 +402,74 @@ pub fn mode5(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     try inv.free(alloc);
     return sum;
 }
+
+pub fn mode6(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
+    std.debug.assert(!second_lvl);
+    var nums = try std.ArrayList(std.ArrayList(usize)).initCapacity(alloc, 1);
+    var ops = try std.ArrayList(u8).initCapacity(alloc, 1);
+    var sum: usize = 0;
+    var row: usize = 0;
+    var col: usize = 0;
+    while (true) : (row += 1) {
+        col = 0;
+        // std.debug.print("row start {}\n", .{row});
+        while ((fr.peekByte() catch break) != '\n') {
+            while (try fr.peekByte() == ' ') {
+                _ = try fr.takeByte();
+            }
+            var buf = try std.ArrayList(u8).initCapacity(alloc, 0);
+            while (!std.ascii.isWhitespace(try fr.peekByte())) {
+                try buf.append(alloc, try fr.takeByte());
+            }
+            if (buf.items.len == 0) {} else if (std.ascii.isAlphanumeric(buf.items[0])) {
+                const num = try std.fmt.parseInt(usize, buf.items, 10);
+                if (row == 0)
+                    try nums.append(alloc, try std.ArrayList(usize).initCapacity(alloc, 1));
+                // std.debug.print("nums {} append {}\n", .{ col, num });
+                try nums.items[col].append(alloc, num);
+                try ops.append(alloc, '.');
+            } else {
+                std.debug.assert(buf.items.len == 1);
+                // std.debug.print("op {c} col {}\n", .{buf.items[0]});
+                ops.items[col] = buf.items[0];
+            }
+            while (try fr.peekByte() == ' ') {
+                // std.debug.print("skip _{c}_\n", .{try fr.peekByte()});
+                _ = try fr.takeByte();
+            }
+            col += 1;
+        }
+        if (try fr.takeByte() != '\n')
+            break;
+        if (col == 0) {
+            // std.debug.print("boom\n", .{});
+            break;
+        }
+    }
+    // for (nums.items) |num_col| {
+    //     for (num_col.items) |num| {
+    //         std.debug.print("{} ", .{num});
+    //     }
+    //     std.debug.print("\n", .{});
+    // }
+    for (nums.items, 0..) |num_col, i| {
+        var acc: usize = if (ops.items[i] == '*') 1 else 0;
+        for (num_col.items) |num| {
+            if (ops.items[i] == '*') {
+                acc *= num;
+            } else {
+                acc += num;
+            }
+        }
+        sum += acc;
+    }
+    for (nums.items) |*num_col| {
+        num_col.clearAndFree(alloc);
+    }
+    nums.clearAndFree(alloc);
+    return @intCast(sum);
+}
+
 pub fn main() !void {
     var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
     const gpa = general_purpose_allocator.allocator();
@@ -435,6 +503,8 @@ pub fn main() !void {
             try mode4(gpa, fr, mode == 2)
         else if (day == 5)
             try mode5(gpa, fr, mode == 2)
+        else if (day == 6)
+            try mode6(gpa, fr, mode == 2)
         else {
             unreachable;
         };
