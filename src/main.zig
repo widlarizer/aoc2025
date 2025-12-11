@@ -606,9 +606,9 @@ fn shorter(ctx: *std.ArrayList(Loc), conn_a: Conn, conn_b: Conn) std.math.Order 
     return std.math.order(cart3d_len(ctx, conn_a), cart3d_len(ctx, conn_b));
 }
 pub fn mode8(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
-    std.debug.assert(!second_lvl);
     var sum: usize = 0;
     var locs = try std.ArrayList(Loc).initCapacity(alloc, 1);
+    defer locs.deinit(alloc);
     while (true) {
         const x_s = fr.takeDelimiterExclusive(',') catch break;
         _ = try fr.takeByte();
@@ -624,6 +624,7 @@ pub fn mode8(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     }
 
     var pq = std.PriorityQueue(Conn, *std.ArrayList(Loc), shorter).init(alloc, &locs);
+    defer pq.deinit();
     for (0..locs.items.len) |loc1| {
         for (0..locs.items.len) |loc2| {
             if (loc1 < loc2)
@@ -631,41 +632,52 @@ pub fn mode8(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
         }
     }
     var groups = try std.ArrayList(usize).initCapacity(alloc, locs.items.len);
+    defer groups.deinit(alloc);
+    var group_exists = try std.ArrayList(bool).initCapacity(alloc, locs.items.len);
+    defer group_exists.deinit(alloc);
+
     for (0..locs.items.len) |loc| {
         try groups.append(alloc, loc);
+        try group_exists.append(alloc, true);
     }
     var count: usize = 0;
-    // var it = pq.iterator();
+    var alive: usize = locs.items.len;
+
     while (pq.removeOrNull()) |conn| {
-        // const loc1 = locs.items[conn.one];
-        // const loc2 = locs.items[conn.other];
+        const loc1 = locs.items[conn.one];
+        const loc2 = locs.items[conn.other];
         const old_group = @max(groups.items[conn.one], groups.items[conn.other]);
         const new_group = @min(groups.items[conn.one], groups.items[conn.other]);
-        // std.debug.print("{},{},{} to {},{},{} len {} merge {} {}\n", .{ loc1.x, loc1.y, loc1.z, loc2.x, loc2.y, loc2.z, cart3d_len(&locs, conn), old_group, new_group });
+        if (second_lvl and group_exists.items[old_group])
+            alive -= 1;
+        group_exists.items[old_group] = false;
+        if (second_lvl) {
+            if (alive == 0) // What?
+                return @intCast(loc1.x * loc2.x);
+        }
+
         for (groups.items) |*g| {
             if (g.* == old_group)
                 g.* = new_group;
         }
         count += 1;
-        if (count == 1000) // NOTE this is wrong for test input
+        if (!second_lvl and count == 1000) // NOTE this is wrong for test input
             break;
     }
     var group_size = try std.ArrayList(usize).initCapacity(alloc, locs.items.len);
+    defer group_size.deinit(alloc);
     for (0..locs.items.len) |_| {
         try group_size.append(alloc, 0);
     }
     for (groups.items, 0..) |g, idx| {
-        // const loc = locs.items[idx];
-        // if (g != idx)
-        //     std.debug.print("loc {} {} {} in group {}\n", .{ loc.x, loc.y, loc.z, g });
         _ = idx;
         group_size.items[g] += 1;
     }
 
     var size_pq = std.PriorityQueue(usize, void, dumbGreaterThan).init(alloc, {});
+    defer size_pq.deinit();
     for (group_size.items, 0..) |size, gidx| {
         _ = gidx;
-        // std.debug.print("ggroup {} size {}\n", .{ gidx, size });
         try size_pq.add(size);
     }
     sum = 1;
