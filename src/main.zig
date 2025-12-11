@@ -403,8 +403,7 @@ pub fn mode5(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     return sum;
 }
 
-pub fn mode6(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
-    std.debug.assert(!second_lvl);
+pub fn mode6_1(alloc: std.mem.Allocator, fr: *std.Io.Reader) !i64 {
     var nums = try std.ArrayList(std.ArrayList(usize)).initCapacity(alloc, 1);
     var ops = try std.ArrayList(u8).initCapacity(alloc, 1);
     var sum: usize = 0;
@@ -469,6 +468,59 @@ pub fn mode6(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     nums.clearAndFree(alloc);
     return @intCast(sum);
 }
+pub fn mode6_2(alloc: std.mem.Allocator, fr: *std.Io.Reader) !i64 {
+    var raws = try std.ArrayList(std.ArrayList(u8)).initCapacity(alloc, 1);
+    var ops = try std.ArrayList(u8).initCapacity(alloc, 1);
+    var sum: usize = 0;
+    var row: usize = 0;
+    var col: usize = 0;
+    var max_col: usize = 0;
+    while (true) : (row += 1) {
+        col = 0;
+        while ((fr.peekByte() catch break) != '\n') {
+            if (col == 0)
+                try raws.append(alloc, try std.ArrayList(u8).initCapacity(alloc, 1));
+            try raws.items[row].append(alloc, try fr.takeByte());
+            col += 1;
+            max_col = @max(col, max_col);
+        }
+        if (try fr.takeByte() != '\n')
+            break;
+        if (col == 0) {
+            break;
+        }
+    }
+    ops.items = raws.pop().?.items;
+    var nums = try std.ArrayList(usize).initCapacity(alloc, max_col);
+    var first = true;
+    var op: u8 = ' ';
+    var acc: usize = 0;
+    for (0..max_col) |c| {
+        try nums.append(alloc, 0);
+        var valid = false;
+        for (0..row - 1) |r| {
+            const char = raws.items[r].items[c];
+            if (char != ' ') {
+                valid = true;
+                nums.items[c] *= 10;
+                nums.items[c] += char - '0';
+            }
+        }
+        if (first) {
+            op = ops.items[c];
+            acc = if (op == '*') 1 else 0;
+        }
+        if (valid) {
+            acc = if (op == '*') acc * nums.items[c] else acc + nums.items[c];
+            first = false;
+        } else {
+            sum += acc;
+            first = true;
+        }
+    }
+    sum += acc;
+    return @intCast(sum);
+}
 
 pub fn main() !void {
     var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
@@ -503,8 +555,10 @@ pub fn main() !void {
             try mode4(gpa, fr, mode == 2)
         else if (day == 5)
             try mode5(gpa, fr, mode == 2)
-        else if (day == 6)
-            try mode6(gpa, fr, mode == 2)
+        else if (day == 6 and mode == 1)
+            try mode6_1(gpa, fr)
+        else if (day == 6 and mode == 2)
+            try mode6_2(gpa, fr)
         else {
             unreachable;
         };
