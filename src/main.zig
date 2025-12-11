@@ -522,7 +522,7 @@ pub fn mode6_2(alloc: std.mem.Allocator, fr: *std.Io.Reader) !i64 {
     return @intCast(sum);
 }
 pub fn mode7(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
-    var raws = try std.ArrayList(std.ArrayList(u8)).initCapacity(alloc, 1);
+    var raws = try std.ArrayList(u8).initCapacity(alloc, 1);
     var sum: usize = 0;
     var row: usize = 0;
     var col: usize = 0;
@@ -530,9 +530,7 @@ pub fn mode7(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     while (true) : (row += 1) {
         col = 0;
         while ((fr.peekByte() catch break) != '\n') {
-            if (col == 0)
-                try raws.append(alloc, try std.ArrayList(u8).initCapacity(alloc, 1));
-            try raws.items[row].append(alloc, try fr.takeByte());
+            try raws.append(alloc, try fr.takeByte());
             col += 1;
             max_col = @max(col, max_col);
         }
@@ -552,7 +550,7 @@ pub fn mode7(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     }
     for (0..row) |r| {
         for (0..max_col) |c| {
-            const char = raws.items[r].items[c];
+            const char = raws.items[c + max_col * r];
             if (r == 0) {
                 if (char == 'S') {
                     next_states.items[c] = 1;
