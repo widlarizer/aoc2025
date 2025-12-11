@@ -521,6 +521,72 @@ pub fn mode6_2(alloc: std.mem.Allocator, fr: *std.Io.Reader) !i64 {
     sum += acc;
     return @intCast(sum);
 }
+pub fn mode7(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
+    var raws = try std.ArrayList(std.ArrayList(u8)).initCapacity(alloc, 1);
+    var sum: usize = 0;
+    var row: usize = 0;
+    var col: usize = 0;
+    var max_col: usize = 0;
+    while (true) : (row += 1) {
+        col = 0;
+        while ((fr.peekByte() catch break) != '\n') {
+            if (col == 0)
+                try raws.append(alloc, try std.ArrayList(u8).initCapacity(alloc, 1));
+            try raws.items[row].append(alloc, try fr.takeByte());
+            col += 1;
+            max_col = @max(col, max_col);
+        }
+        if (try fr.takeByte() != '\n')
+            break;
+        if (col == 0) {
+            break;
+        }
+    }
+    var states = try std.ArrayList(usize).initCapacity(alloc, max_col);
+    defer states.deinit(alloc);
+    var next_states = try std.ArrayList(usize).initCapacity(alloc, max_col);
+    defer next_states.deinit(alloc);
+    for (0..max_col) |_| {
+        try states.append(alloc, 0);
+        try next_states.append(alloc, 0);
+    }
+    for (0..row) |r| {
+        for (0..max_col) |c| {
+            const char = raws.items[r].items[c];
+            if (r == 0) {
+                if (char == 'S') {
+                    next_states.items[c] = 1;
+                }
+            } else {
+                if (char == '^' and states.items[c] > 0) {
+                    const particles = if (second_lvl) states.items[c] else 1;
+                    if (!second_lvl)
+                        sum += 1;
+                    if (c > 0) {
+                        next_states.items[c - 1] += particles;
+                        if (!second_lvl)
+                            next_states.items[c - 1] = @max(next_states.items[c - 1], 1);
+                    }
+                    if (c < max_col) {
+                        next_states.items[c + 1] += particles;
+                        if (!second_lvl)
+                            next_states.items[c + 1] = @max(next_states.items[c + 1], 1);
+                    }
+                    next_states.items[c] = 0;
+                }
+            }
+        }
+        for (0..max_col) |c| {
+            states.items[c] = next_states.items[c];
+        }
+    }
+    if (second_lvl) {
+        for (0..max_col) |c| {
+            sum += states.items[c];
+        }
+    }
+    return @intCast(sum);
+}
 
 pub fn main() !void {
     var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
@@ -559,6 +625,8 @@ pub fn main() !void {
             try mode6_1(gpa, fr)
         else if (day == 6 and mode == 2)
             try mode6_2(gpa, fr)
+        else if (day == 7)
+            try mode7(gpa, fr, mode == 2)
         else {
             unreachable;
         };
