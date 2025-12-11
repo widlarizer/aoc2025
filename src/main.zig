@@ -586,7 +586,8 @@ pub fn mode7(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     return @intCast(sum);
 }
 
-const Loc: type = struct { x: usize, y: usize, z: usize };
+const Loc2: type = struct { x: usize, y: usize };
+const Loc3: type = struct { x: usize, y: usize, z: usize };
 const Conn: type = struct { one: usize, other: usize };
 fn dumbGreaterThan(context: void, a: usize, b: usize) std.math.Order {
     _ = context;
@@ -597,17 +598,26 @@ fn square_coord(one: usize, other: usize) i64 {
     const other_s: i64 = @intCast(other);
     return (one_s - other_s) * (one_s - other_s);
 }
-fn cart3d_len(ctx: *std.ArrayList(Loc), conn: Conn) i64 {
+fn cart3d_len(ctx: *std.ArrayList(Loc3), conn: Conn) i64 {
     const loc1 = ctx.items[conn.one];
     const loc2 = ctx.items[conn.other];
     return square_coord(loc1.x, loc2.x) + square_coord(loc1.y, loc2.y) + square_coord(loc1.z, loc2.z);
 }
-fn shorter(ctx: *std.ArrayList(Loc), conn_a: Conn, conn_b: Conn) std.math.Order {
+fn area2d(ctx: *std.ArrayList(Loc2), conn: Conn) i64 {
+    const loc1 = ctx.items[conn.one];
+    const loc2 = ctx.items[conn.other];
+    const x1: i64 = @intCast(loc1.x);
+    const y1: i64 = @intCast(loc1.y);
+    const x2: i64 = @intCast(loc2.x);
+    const y2: i64 = @intCast(loc2.y);
+    return @intCast(@abs(x1 - x2 + 1) * @abs(y1 - y2 + 1));
+}
+fn shorter(ctx: *std.ArrayList(Loc3), conn_a: Conn, conn_b: Conn) std.math.Order {
     return std.math.order(cart3d_len(ctx, conn_a), cart3d_len(ctx, conn_b));
 }
 pub fn mode8(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
     var sum: usize = 0;
-    var locs = try std.ArrayList(Loc).initCapacity(alloc, 1);
+    var locs = try std.ArrayList(Loc3).initCapacity(alloc, 1);
     defer locs.deinit(alloc);
     while (true) {
         const x_s = fr.takeDelimiterExclusive(',') catch break;
@@ -619,11 +629,11 @@ pub fn mode8(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
         const z_s = try fr.takeDelimiterExclusive('\n');
         _ = try fr.takeByte();
         const z = try std.fmt.parseInt(usize, z_s, 10);
-        const loc: Loc = .{ .x = x, .y = y, .z = z };
+        const loc: Loc3 = .{ .x = x, .y = y, .z = z };
         try locs.append(alloc, loc);
     }
 
-    var pq = std.PriorityQueue(Conn, *std.ArrayList(Loc), shorter).init(alloc, &locs);
+    var pq = std.PriorityQueue(Conn, *std.ArrayList(Loc3), shorter).init(alloc, &locs);
     defer pq.deinit();
     for (0..locs.items.len) |loc1| {
         for (0..locs.items.len) |loc2| {
@@ -692,6 +702,35 @@ pub fn mode8(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i6
     }
     return @intCast(sum);
 }
+pub fn mode9(alloc: std.mem.Allocator, fr: *std.Io.Reader, second_lvl: bool) !i64 {
+    std.debug.assert(!second_lvl);
+    // var sum: usize = 0;
+    var locs = try std.ArrayList(Loc2).initCapacity(alloc, 1);
+    defer locs.deinit(alloc);
+    while (true) {
+        const x_s = fr.takeDelimiterExclusive(',') catch break;
+        _ = try fr.takeByte();
+        const x = try std.fmt.parseInt(usize, x_s, 10);
+        const y_s = try fr.takeDelimiterExclusive('\n');
+        _ = try fr.takeByte();
+        const y = try std.fmt.parseInt(usize, y_s, 10);
+        const loc: Loc2 = .{ .x = x, .y = y };
+        try locs.append(alloc, loc);
+    }
+
+    var max_size: usize = 0;
+    for (0..locs.items.len) |idx1| {
+        for (0..locs.items.len) |idx2| {
+            if (idx1 < idx2) {
+                const conn: Conn = .{ .one = idx1, .other = idx2 };
+                const size = area2d(&locs, conn);
+                max_size = @max(max_size, size);
+                // std.debug.print("size {},{}..{},{} {}\n", .{ locs.items[idx1].x, locs.items[idx1].y, locs.items[idx2].x, locs.items[idx2].y, size });
+            }
+        }
+    }
+    return @intCast(max_size);
+}
 
 pub fn main() !void {
     var general_purpose_allocator: std.heap.GeneralPurposeAllocator(.{}) = .init;
@@ -734,6 +773,8 @@ pub fn main() !void {
             try mode7(gpa, fr, mode == 2)
         else if (day == 8)
             try mode8(gpa, fr, mode == 2)
+        else if (day == 9)
+            try mode9(gpa, fr, mode == 2)
         else {
             unreachable;
         };
